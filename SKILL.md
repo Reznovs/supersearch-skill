@@ -36,6 +36,8 @@ allowed-tools:
 
 ## 1. Quick Decision: Broad vs Precise
 
+**Before choosing a mode: Complete §4.1 Step 0 (engine availability check). No search is valid without it.**
+
 Read the user's request. Match against these triggers:
 
 **→ Broad Search (Mode A)** when user says or implies:
@@ -195,38 +197,54 @@ factor, while Source B argues Y is more critical.
 
 ### 4.1 Execution Protocol
 
-**MANDATORY: Complete ALL of Step 0 before doing ANYTHING else. Do NOT skip to search.**
+**STOP. DO NOT CALL ANY SEARCH TOOL UNTIL STEP 0 IS FULLY COMPLETE AND USER HAS CONFIRMED.**
 
-0. **Engine Availability Checklist** — Execute these checks IN ORDER. STOP at each sub-step and complete it before moving on.
+0. **Engine Availability — MANDATORY Pre-Search Protocol**
 
-   **0a. Check MCP tools** — Look at your available tool list. For each engine, check if the MCP tool is callable:
-   - `mcp__tavily__tavily_search` in your tools → Tavily available
-   - `mcp__exa__web_search_exa` in your tools → Exa available
-   - `mcp__brave__brave_web_search` in your tools → Brave available
-   - If a tool is NOT in your list → that engine is unavailable. Do NOT use Bash echo, placeholder, or any substitute.
+   **0a. Check MCP tools** — Look at your available tool list RIGHT NOW:
+   - `mcp__tavily__tavily_search` in your tools → Tavily = YES
+   - `mcp__exa__web_search_exa` in your tools → Exa = YES
+   - `mcp__brave__brave_web_search` in your tools → Brave = YES
+   - Any tool NOT in your list → that engine = NO
+   - **Rule: tool NOT in list = engine unavailable. Do NOT use Bash echo, placeholder, or any substitute.**
 
-   **0b. Check WebSearch** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
-   - If `"countryCode":"US"` → WebSearch is available
-   - Otherwise (non-US, timeout, error, or curl unavailable) → WebSearch is unavailable
+   **0b. Check WebSearch geo-availability** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
+   - `"countryCode":"US"` → WebSearch = YES
+   - ANYTHING ELSE (CN, non-US, timeout, error, curl unavailable) → WebSearch = **NO**
+   - **CRITICAL: WebSearch in your tool list does NOT mean it works. If IP is not US, WebSearch = NO. Do NOT call it.**
 
-   **0c. Count available engines** — Tally how many engines from 0a + 0b are available.
+   **0c. Output engine status table to user** (YOU MUST OUTPUT THIS):
+   ```
+   引擎可用性检查：
+   - Tavily:    [可用/不可用] (原因)
+   - Exa:       [可用/不可用] (原因)
+   - Brave:     [可用/不可用] (原因)
+   - WebSearch: [可用/不可用] (原因)
+   共 X 个引擎可用。
+   ```
 
-   **0d. If 0 engines available** — STOP. Do NOT search. Tell the user:
-   > "没有可用的搜索引擎。需要配置至少一个 API Key（Tavily/Exa/Brave）。要我帮你配置吗？"
-   - If user says yes → help them configure (ask for key, write to .env, register MCP)
-   - If user says no → stop entirely, do NOT attempt any search
+   **0d. Wait for user confirmation** — After outputting the table, STOP and wait. Do NOT proceed to search until you handle one of these cases:
 
-   **0e. If engines are missing but some are available** — ASK the user before searching:
-   > "当前可用引擎：[列表]。以下引擎未配置：[缺失列表]。你有这些 API Key 吗？如果有请提供，我来配置。没有的话我用当前引擎搜索。"
-   - If user provides keys → configure and add them
-   - If user says no or doesn't respond → proceed with available engines only
+   **Case A: 0 engines available**
+   → Tell user: "没有可用的搜索引擎。需要配置至少一个 API Key（Tavily/Exa/Brave）。要我帮你配置吗？"
+   → If yes → help configure (ask for key, write to .env, register MCP, re-check availability)
+   → If no → STOP. Do NOT attempt any search.
 
-   **0f. Validate keys at runtime** — When calling an engine, if it returns 401/403:
+   **Case B: Some engines missing**
+   → Tell user: "以下引擎未配置：[列表]。你有这些 API Key 吗？有请提供我来配置，没有我用当前引擎搜索。"
+   → If user provides keys → configure and add them, then re-check
+   → If user says no or explicitly confirms to proceed → proceed with available engines only
+
+   **Case C: All engines available**
+   → Tell user: "全部引擎就绪，开始搜索。"
+   → Proceed to Step 1.
+
+   **0e. Validate keys at runtime** — When calling an engine, if it returns 401/403:
    - Skip that engine for this search
    - Inform the user: "[Engine] API key 无效或已过期，跳过该引擎"
    - Continue with remaining engines
 
-   **0g. Cross-validation rule** — With only 1 engine, mark ALL results as `(Single source)`. With 2+ engines, calculate confidence normally.
+   **0f. Cross-validation rule** — With only 1 engine, mark ALL results as `(Single source)`. With 2+ engines, calculate confidence normally.
 
 1. **Classify the topic** (Section 2) — determine language distribution
 2. **Write N queries** — N = number of available engines; distribute languages per Section 2
@@ -279,11 +297,12 @@ After all engines return:
 
 ### 5.2 Execution
 
-1. Identify intent from user's request
-2. Select the BEST single tool
-3. Apply localization: write the query in the appropriate language
-4. Fire the tool with optimized query
-5. If poor results → fall back to second choice → Broad Search (if ≥2 engines available)
+1. **Check tool availability FIRST** — Before selecting a tool, verify it exists in your tool list. If the selected tool is NOT available, pick the next best from the table. If NO tools are available, inform the user and ask for API keys (same as §4.1 Step 0d).
+2. Identify intent from user's request
+3. Select the BEST single tool (only from available tools)
+4. Apply localization: write the query in the appropriate language
+5. Fire the tool with optimized query
+6. If poor results → fall back to second choice → Broad Search (if ≥2 engines available)
 
 ### 5.3 Fallback Chain
 
@@ -367,6 +386,8 @@ Multiple sentences flow naturally together.]
 - NEVER use emoji in citation markers or confidence display
 - NEVER split every sentence into its own section with citations
 - NEVER use Bash echo, placeholder text, or any substitute for MCP tool calls — if a tool is unavailable, skip it and inform the user
+- NEVER call WebSearch when IP is not US — it WILL return 0 results. The tool being in your list does NOT mean it works.
+- NEVER skip the engine availability check (§4.1 Step 0) — you MUST output the availability summary before any search
 
 ---
 
