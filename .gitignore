@@ -1,0 +1,17 @@
+# API keys - NEVER commit
+.env
+
+# Claude Code local context (not for git)
+CLAUDE.md
+
+# Shell history
+*.log
+
+# Editor
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
