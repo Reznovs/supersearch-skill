@@ -53,11 +53,12 @@ if ($failures -gt 0) {
 }
 
 # ── Phase 2: API Keys ─────────────────────────────────────
+# 3-state: -1=user has no key (never ask)  0=undecided (will ask)  1=configured
 Write-Info "Phase 2/5: Configuring API Keys..."
 Write-Info "(Can be preset via environment variables: TAVILY_API_KEY / EXA_API_KEY / BRAVE_API_KEY)"
-Write-Info "(All keys are optional — missing engines will be skipped)"
 
 $KeysFile = Join-Path $SkillDir ".env"
+$StateFile = Join-Path $SkillDir ".supersearch-state"
 
 # Load existing .env if present
 if (Test-Path $KeysFile) {
@@ -69,59 +70,85 @@ if (Test-Path $KeysFile) {
     Write-Info "Found existing .env file"
 }
 
+# Load state file: -1=skip forever, 0=ask, 1=configured
+$state = @{ TAVILY = 0; EXA = 0; BRAVE = 0 }
+if (Test-Path $StateFile) {
+    Get-Content $StateFile | ForEach-Object {
+        if ($_ -match '^([A-Z_]+)=(-?\d+)$') {
+            $state[$Matches[1]] = [int]$Matches[2]
+        }
+    }
+}
+
 $needKeys = $false
 $engineCount = 0
 
-# Tavily
-$tavilyKey = [Environment]::GetEnvironmentVariable("TAVILY_API_KEY", "Process")
-if (-not $tavilyKey) {
-    Write-Warn "TAVILY_API_KEY not found"
-    $tavilyKey = Read-Host "  Enter Tavily API Key (press Enter to skip, get from https://app.tavily.com)"
-    if ($tavilyKey) {
-        $needKeys = $true
-        $engineCount++
-    } else {
-        Write-Info "  Skipping Tavily (deep research unavailable)"
+# Helper: ask for a single engine's key
+function Ask-EngineKey {
+    param(
+        [string]$Engine,
+        [string]$EnvVar,
+        [string]$Url,
+        [string]$Desc,
+        [ref]$StateRef,
+        [ref]$NeedKeysRef,
+        [ref]$CountRef
+    )
+    $s = $StateRef.Value
+    $currentVal = [Environment]::GetEnvironmentVariable($EnvVar, "Process")
+
+    # Key exists → state = 1
+    if ($currentVal) {
+        $s[$Engine] = 1
+        Write-Ok "$EnvVar configured"
+        $CountRef.Value++
+        return $currentVal
     }
-} else {
-    Write-Ok "TAVILY_API_KEY configured"
-    $engineCount++
+
+    # State -1 → user said "no", skip forever
+    if ($s[$Engine] -eq -1) {
+        Write-Info "$EnvVar : marked as unavailable, skipping ($Desc disabled)"
+        return $null
+    }
+
+    # State 0 → ask
+    Write-Warn "$EnvVar not found"
+    $input = Read-Host "  Enter $Engine API Key (type 'n' if you don't have one, press Enter to configure later, get from $Url)"
+
+    if ($input -eq 'n' -or $input -eq 'N') {
+        $s[$Engine] = -1
+        Write-Info "  Marked as unavailable, won't ask again"
+        return $null
+    } elseif ($input) {
+        $s[$Engine] = 1
+        $NeedKeysRef.Value = $true
+        $CountRef.Value++
+        return $input
+    } else {
+        $s[$Engine] = 0
+        Write-Info "  Skipped, will ask next time"
+        return $null
+    }
 }
 
-# Exa
-$exaKey = [Environment]::GetEnvironmentVariable("EXA_API_KEY", "Process")
-if (-not $exaKey) {
-    Write-Warn "EXA_API_KEY not found"
-    $exaKey = Read-Host "  Enter Exa API Key (press Enter to skip, get from https://dashboard.exa.ai)"
-    if ($exaKey) {
-        $needKeys = $true
-        $engineCount++
-    } else {
-        Write-Info "  Skipping Exa (code/academic search unavailable)"
-    }
-} else {
-    Write-Ok "EXA_API_KEY configured"
-    $engineCount++
-}
+$tavilyKey = Ask-EngineKey "TAVILY" "TAVILY_API_KEY" "https://app.tavily.com" "deep research" ([ref]$state) ([ref]$needKeys) ([ref]$engineCount)
+$exaKey    = Ask-EngineKey "EXA"    "EXA_API_KEY"    "https://dashboard.exa.ai" "code/academic search" ([ref]$state) ([ref]$needKeys) ([ref]$engineCount)
+$braveKey  = Ask-EngineKey "BRAVE"  "BRAVE_API_KEY"  "https://brave.com/search/api/" "news search" ([ref]$state) ([ref]$needKeys) ([ref]$engineCount)
 
-# Brave
-$braveKey = [Environment]::GetEnvironmentVariable("BRAVE_API_KEY", "Process")
-if (-not $braveKey) {
-    Write-Warn "BRAVE_API_KEY not found"
-    $braveKey = Read-Host "  Enter Brave API Key (press Enter to skip, get from https://brave.com/search/api/)"
-    if ($braveKey) {
-        $needKeys = $true
-        $engineCount++
-    } else {
-        Write-Info "  Skipping Brave (news search unavailable)"
-    }
-} else {
-    Write-Ok "BRAVE_API_KEY configured"
-    $engineCount++
-}
+# Save state file
+@"
+# SuperSearch engine state: -1=no(skip forever) 0=ask 1=configured
+TAVILY=$($state['TAVILY'])
+EXA=$($state['EXA'])
+BRAVE=$($state['BRAVE'])
+"@ | Set-Content -Path $StateFile -Encoding UTF8
 
 if ($engineCount -eq 0) {
-    Write-Err "No API Keys configured! At least one search engine is required."
+    if ($state['TAVILY'] -eq -1 -and $state['EXA'] -eq -1 -and $state['BRAVE'] -eq -1) {
+        Write-Err "All engines marked as unavailable. Delete .supersearch-state and re-run to reconfigure."
+    } else {
+        Write-Err "No API Keys configured! At least one search engine is required."
+    }
     exit 1
 }
 

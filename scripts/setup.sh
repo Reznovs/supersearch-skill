@@ -48,72 +48,103 @@ if (( failures > 0 )); then
 fi
 
 # ── Phase 2: 收集 API Keys ─────────────────────────────────
+# 三态管理: -1=用户明确没有(永不再问)  0=未决定(会询问)  1=已配置
 info "Phase 2/5: 配置 API Keys..."
 info "（可从环境变量预设: TAVILY_API_KEY / EXA_API_KEY / BRAVE_API_KEY）"
-info "（所有 Key 均可选，缺少的引擎会自动跳过）"
 
 KEYS_FILE="$SKILL_DIR/.env"
+STATE_FILE="$SKILL_DIR/.supersearch-state"
 
-# 读取已有值
+# 读取已有 .env
 if [[ -f "$KEYS_FILE" ]]; then
     source "$KEYS_FILE" 2>/dev/null || true
     info "已检测到现有 .env 文件"
 fi
 
+# 读取已有状态，不存在则默认 0
+declare -A STATE
+STATE[TAVILY]=0; STATE[EXA]=0; STATE[BRAVE]=0
+if [[ -f "$STATE_FILE" ]]; then
+    while IFS='=' read -r k v; do
+        [[ "$k" =~ ^[A-Z_]+$ ]] && STATE["$k"]="$v"
+    done < "$STATE_FILE"
+fi
+
 need_keys=false
 ENGINE_COUNT=0
 
-# Tavily
-if [[ -z "${TAVILY_API_KEY:-}" ]]; then
-    warn "未检测到 TAVILY_API_KEY"
-    echo -n "  请输入 Tavily API Key（回车跳过，从 https://app.tavily.com 获取）: "
-    read -r TAVILY_API_KEY
-    if [[ -n "$TAVILY_API_KEY" ]]; then
-        need_keys=true
-        ENGINE_COUNT=$((ENGINE_COUNT + 1))
-    else
-        info "  跳过 Tavily（深度研究功能不可用）"
-    fi
-else
-    ok "TAVILY_API_KEY 已配置 ✓"
-    ENGINE_COUNT=$((ENGINE_COUNT + 1))
-fi
+# 辅助函数：处理单个引擎
+# 参数: $1=引擎名 $2=环境变量名 $3=获取URL $4=功能描述
+ask_key() {
+    local engine="$1" var="$2" url="$3" desc="$4"
+    local state="${STATE[$engine]:-0}"
+    local current_val="${!var:-}"
 
-# Exa
-if [[ -z "${EXA_API_KEY:-}" ]]; then
-    warn "未检测到 EXA_API_KEY"
-    echo -n "  请输入 Exa API Key（回车跳过，从 https://dashboard.exa.ai 获取）: "
-    read -r EXA_API_KEY
-    if [[ -n "$EXA_API_KEY" ]]; then
-        need_keys=true
+    # 已有 key → 状态设为 1
+    if [[ -n "$current_val" ]]; then
+        STATE[$engine]=1
+        ok "$var 已配置 ✓"
         ENGINE_COUNT=$((ENGINE_COUNT + 1))
-    else
-        info "  跳过 Exa（代码/学术搜索不可用）"
+        return
     fi
-else
-    ok "EXA_API_KEY 已配置 ✓"
-    ENGINE_COUNT=$((ENGINE_COUNT + 1))
-fi
 
-# Brave
-if [[ -z "${BRAVE_API_KEY:-}" ]]; then
-    warn "未检测到 BRAVE_API_KEY"
-    echo -n "  请输入 Brave API Key（回车跳过，从 https://brave.com/search/api/ 获取）: "
-    read -r BRAVE_API_KEY
-    if [[ -n "$BRAVE_API_KEY" ]]; then
+    # 状态 -1 → 用户明确跳过，不再询问
+    if [[ "$state" == "-1" ]]; then
+        info "$var: 已标记为无，跳过（$desc 不可用）"
+        return
+    fi
+
+    # 状态 0 → 询问
+    warn "未检测到 $var"
+    echo -n "  输入 $engine API Key（没有请输入 n，回车稍后配置，从 $url 获取）: "
+    read -r input
+
+    if [[ "$input" == "n" || "$input" == "N" ]]; then
+        STATE[$engine]=-1
+        info "  已标记为无，下次安装不再询问"
+    elif [[ -n "$input" ]]; then
+        declare -g "$var=$input"
+        STATE[$engine]=1
         need_keys=true
         ENGINE_COUNT=$((ENGINE_COUNT + 1))
     else
-        info "  跳过 Brave（新闻搜索不可用）"
+        STATE[$engine]=0
+        info "  跳过，下次安装会再询问"
     fi
-else
-    ok "BRAVE_API_KEY 已配置 ✓"
-    ENGINE_COUNT=$((ENGINE_COUNT + 1))
-fi
+}
+
+ask_key "TAVILY" "TAVILY_API_KEY" "https://app.tavily.com" "深度研究"
+ask_key "EXA"    "EXA_API_KEY"    "https://dashboard.exa.ai" "代码/学术搜索"
+ask_key "BRAVE"  "BRAVE_API_KEY"  "https://brave.com/search/api/" "新闻搜索"
+
+# 保存状态文件
+cat > "$STATE_FILE" <<EOF
+# SuperSearch engine state: -1=no(skip forever) 0=ask 1=configured
+TAVILY=${STATE[TAVILY]}
+EXA=${STATE[EXA]}
+BRAVE=${STATE[BRAVE]}
+EOF
 
 if (( ENGINE_COUNT == 0 )); then
-    err "未配置任何 API Key！至少需要一个搜索引擎才能使用 SuperSearch。"
+    if [[ "${STATE[TAVILY]}" == "-1" && "${STATE[EXA]}" == "-1" && "${STATE[BRAVE]}" == "-1" ]]; then
+        err "所有引擎均已标记为「无」。如需使用，请删除 .supersearch-state 文件后重新安装。"
+    else
+        err "未配置任何 API Key！至少需要一个搜索引擎才能使用 SuperSearch。"
+    fi
     exit 1
+fi
+
+if $need_keys; then
+    # 写入 .env
+    cat > "$KEYS_FILE" <<EOF
+# SuperSearch API Keys — 不要提交到 Git
+# 缺少的 Key 留空即可，对应引擎会自动跳过
+TAVILY_API_KEY=${TAVILY_API_KEY:-}
+EXA_API_KEY=${EXA_API_KEY:-}
+BRAVE_API_KEY=${BRAVE_API_KEY:-}
+EOF
+    ok "API Keys 已保存到 $KEYS_FILE（$ENGINE_COUNT 个引擎可用）"
+    info "此文件已在 .gitignore 中，不会被提交到 GitHub"
 fi
 
 if $need_keys; then

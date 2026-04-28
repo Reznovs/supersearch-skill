@@ -1,5 +1,6 @@
 # API keys - NEVER commit
 .env
+.supersearch-state
 
 # Claude Code local context (not for git)
 CLAUDE.md
