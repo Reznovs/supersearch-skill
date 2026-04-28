@@ -32,11 +32,83 @@ allowed-tools:
   - mcp__brave__brave_news_search
 ---
 
+# SuperSearch — Configuration Gate (MANDATORY — runs BEFORE everything else)
+
+**YOU MUST COMPLETE THIS GATE BEFORE DOING ANYTHING ELSE. DO NOT SKIP. DO NOT PROCEED TO SEARCH.**
+
+## Step 0: Read Configuration State
+
+**0a. Find and read `.supersearch-state`** — This file is in the skill's root directory. Read it now.
+
+The file contains 3 lines, one per engine:
+```
+TAVILY=<value>
+EXA=<value>
+BRAVE=<value>
+```
+
+**0b. Interpret each value:**
+
+| Value | Meaning | Your action |
+|-------|---------|-------------|
+| `1` | Engine configured with valid API key | ✅ Ready — no action needed |
+| `-1` | User explicitly has no key (marked "never ask") | ⏭️ Skip — do NOT ask about this engine |
+| `0` | Not yet configured | 🚫 **BLOCKED — you MUST resolve this before ANY search** |
+
+**0c. Check for blockers:**
+
+- If **ALL engines are `1` or `-1`** (no `0` exists) → Configuration complete. Proceed to §1 (Quick Decision).
+- If **ANY engine is `0`** → You are BLOCKED. Go to Step 0d immediately.
+
+**0d. Resolve `0` engines — FORCE USER INTERACTION:**
+
+For EACH engine with state `0`, ask the user:
+
+```
+[Engine Name] 尚未配置。
+  选项：
+    1. 提供 API Key → 我来配置该引擎
+    2. 输入 n → 标记为「无」，以后不再询问
+
+  获取 Key: [URL]
+```
+
+- **User provides key** → Validate it (call the API, check for 401/403). If valid, write to `.env`, update state to `1`. If invalid, tell user and ask again.
+- **User says `n`** → Update state to `-1`. Tell user: "已标记为无。如需恢复，删除 `.supersearch-state` 文件后重新触发 skill。"
+- **User says something else** → Ask again. Do NOT proceed until resolved.
+
+**0e. After ALL `0`s are resolved** → Re-read `.supersearch-state`. Confirm no `0` remains. Then proceed to §1.
+
+**0f. After resolving** → Output confirmation:
+```
+引擎配置状态：
+- Tavily:    [已配置/已跳过]
+- Exa:       [已配置/已跳过]
+- Brave:     [已配置/已跳过]
+共 X 个引擎已配置，可以开始搜索。
+```
+
+---
+
+**STATE FILE NOT FOUND?** If `.supersearch-state` does not exist:
+1. Create it with all engines set to `0`
+2. Run Step 0d for all 3 engines
+3. Then proceed
+
+**CRITICAL RULES:**
+- 🚫 NEVER search with an engine that has state `0` — it has no API key
+- 🚫 NEVER skip this gate — even if the user's request seems urgent
+- 🚫 NEVER assume an engine is available without checking the state file
+- 🚫 NEVER proceed to §1 while any engine is `0`
+- ✅ ALWAYS resolve every `0` before continuing
+
+---
+
 # SuperSearch — Unified Multi-Engine Search
 
 ## 1. Quick Decision: Broad vs Precise
 
-**Before choosing a mode: Complete §4.1 Step 0 (engine availability check). No search is valid without it.**
+**Before choosing a mode: Complete §4.1 Step 0 (runtime engine check). No search is valid without it.**
 
 Read the user's request. Match against these triggers:
 
@@ -197,15 +269,17 @@ factor, while Source B argues Y is more critical.
 
 ### 4.1 Execution Protocol
 
-**STOP. DO NOT CALL ANY SEARCH TOOL UNTIL STEP 0 IS FULLY COMPLETE AND USER HAS CONFIRMED.**
+**STOP. DO NOT CALL ANY SEARCH TOOL UNTIL STEP 0 IS FULLY COMPLETE.**
 
-0. **Engine Availability — MANDATORY Pre-Search Protocol**
+0. **Runtime Engine Check — verify which configured engines are ACTUALLY usable right now**
+
+   **Note:** The Configuration Gate (top of SKILL.md) already ensured no engine has state `0`. This step checks runtime availability.
 
    **0a. Check MCP tools** — Look at your available tool list RIGHT NOW:
    - `mcp__tavily__tavily_search` in your tools → Tavily = YES
    - `mcp__exa__web_search_exa` in your tools → Exa = YES
    - `mcp__brave__brave_web_search` in your tools → Brave = YES
-   - Any tool NOT in your list → that engine = NO
+   - Any tool NOT in your list → that engine = NO (even if state=1, MCP may not be loaded)
    - **Rule: tool NOT in list = engine unavailable. Do NOT use Bash echo, placeholder, or any substitute.**
 
    **0b. Check WebSearch geo-availability** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
@@ -216,28 +290,16 @@ factor, while Source B argues Y is more critical.
    **0c. Output engine status table to user** (YOU MUST OUTPUT THIS):
    ```
    引擎可用性检查：
-   - Tavily:    [可用/不可用] (原因)
-   - Exa:       [可用/不可用] (原因)
-   - Brave:     [可用/不可用] (原因)
-   - WebSearch: [可用/不可用] (原因)
+   - Tavily:    [可用/不可用] (MCP工具是否存在)
+   - Exa:       [可用/不可用] (MCP工具是否存在)
+   - Brave:     [可用/不可用] (MCP工具是否存在)
+   - WebSearch: [可用/不可用] (IP检测结果)
    共 X 个引擎可用。
    ```
 
-   **0d. Wait for user confirmation** — After outputting the table, STOP and wait. Do NOT proceed to search until you handle one of these cases:
-
-   **Case A: 0 engines available**
-   → Tell user: "没有可用的搜索引擎。需要配置至少一个 API Key（Tavily/Exa/Brave）。要我帮你配置吗？"
-   → If yes → help configure (ask for key, write to .env, register MCP, re-check availability)
-   → If no → STOP. Do NOT attempt any search.
-
-   **Case B: Some engines missing**
-   → Tell user: "以下引擎未配置：[列表]。你有这些 API Key 吗？有请提供我来配置，没有我用当前引擎搜索。"
-   → If user provides keys → configure and add them, then re-check
-   → If user says no or explicitly confirms to proceed → proceed with available engines only
-
-   **Case C: All engines available**
-   → Tell user: "全部引擎就绪，开始搜索。"
-   → Proceed to Step 1.
+   **0d. Handle results:**
+   - **0 engines available** → Tell user: "配置的引擎在当前环境不可用（MCP 未加载或 IP 限制）。请检查 MCP 服务器配置。" → STOP
+   - **1+ engines available** → Proceed to Step 1
 
    **0e. Validate keys at runtime** — When calling an engine, if it returns 401/403:
    - Skip that engine for this search
@@ -297,7 +359,7 @@ After all engines return:
 
 ### 5.2 Execution
 
-1. **Check tool availability FIRST** — Before selecting a tool, verify it exists in your tool list. If the selected tool is NOT available, pick the next best from the table. If NO tools are available, inform the user and ask for API keys (same as §4.1 Step 0d).
+1. **Check tool availability FIRST** — Before selecting a tool, verify it exists in your tool list. If the selected tool is NOT available, pick the next best from the table. If NO tools are available, inform the user: "配置的引擎在当前环境不可用，请检查 MCP 服务器配置。"
 2. Identify intent from user's request
 3. Select the BEST single tool (only from available tools)
 4. Apply localization: write the query in the appropriate language
@@ -387,7 +449,8 @@ Multiple sentences flow naturally together.]
 - NEVER split every sentence into its own section with citations
 - NEVER use Bash echo, placeholder text, or any substitute for MCP tool calls — if a tool is unavailable, skip it and inform the user
 - NEVER call WebSearch when IP is not US — it WILL return 0 results. The tool being in your list does NOT mean it works.
-- NEVER skip the engine availability check (§4.1 Step 0) — you MUST output the availability summary before any search
+- NEVER skip the Configuration Gate (top of SKILL.md) — you MUST read `.supersearch-state` and resolve all `0` engines before ANY search
+- NEVER skip the runtime engine check (§4.1 Step 0) — you MUST output the availability summary before any search
 
 ---
 
