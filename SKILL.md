@@ -152,6 +152,8 @@ Multiple institutions downgraded the target price. [4]
 
 ### 3.3 Confidence Score Algorithm
 
+**Prerequisite:** Confidence percentage requires **at least 2 independent sources**. If only 1 engine was used (single-engine mode or only 1 key configured), ALL sections must be marked as `(Single source)` — do NOT calculate a confidence percentage.
+
 Calculate for each section based on the sources cited:
 
 | Condition | Score |
@@ -160,7 +162,7 @@ Calculate for each section based on the sources cited:
 | 2-3 sources agree, minor wording differences | 80-90% |
 | 2 sources agree, some ambiguity remains | 65-75% |
 | Mixed signals, sources partially disagree | 45-60% |
-| Only 1 source available | Mark as "Single source" |
+| Only 1 source available | Mark as "Single source" (no percentage) |
 | Sources clearly contradict each other | State the conflict explicitly |
 
 **When sources contradict:**
@@ -193,12 +195,16 @@ factor, while Source B argues Y is more critical.
      - `TAVILY_API_KEY` set → Tavily available
      - `EXA_API_KEY` set → Exa available
      - `BRAVE_API_KEY` set → Brave available
-     - Any key missing → skip that engine entirely
+     - Any key missing → that engine is unavailable
+   - **AI-driven key recovery** — If engines are missing, ask the user:
+     > "当前配置了 X 个引擎（[列表]）。以下引擎未配置：[缺失列表]。你有这些 API Key 吗？如果有请提供，我来配置。"
+     - If user provides a key → update `.env` and `.supersearch-state`, add the engine
+     - If user says no → proceed with available engines, no further prompts
    - **Validate keys at runtime** — Use optimistic strategy: proceed with all configured engines. If any engine returns 401/403 during search:
      - Skip that engine for the current search
      - Inform the user: "[Engine] API key is invalid or expired, skipping this engine"
      - Continue with remaining engines
-   - **Minimum requirement:** at least 1 engine must be available. If 0 engines, inform the user to configure at least one API key.
+   - **Minimum requirement:** at least 1 engine must be available. If 0 engines and user declines to provide keys, inform the user that at least 1 API key is required.
    - **Cross-validation note:** with only 1 engine, mark all results as "Single source". With 2+ engines, proceed normally.
 1. **Classify the topic** (Section 2) — determine language distribution
 2. **Write N queries** — N = number of available engines; distribute languages per Section 2
@@ -255,12 +261,19 @@ After all engines return:
 2. Select the BEST single tool
 3. Apply localization: write the query in the appropriate language
 4. Fire the tool with optimized query
-5. If poor results → fall back to second choice → Broad Search
+5. If poor results → fall back to second choice → Broad Search (if ≥2 engines available)
 
 ### 5.3 Fallback Chain
 
+If **≥2 engines** available:
 ```
-Primary tool fails/empty → Second choice → Broad Search (all available, 3-4)
+Primary tool fails/empty → Second choice → Broad Search (all available)
+```
+
+If **only 1 engine** available:
+```
+Primary tool fails/empty → Inform user: "[Engine] returned no results. Try rephrasing your query."
+(No fallback — Broad Search with 1 engine is pointless)
 ```
 
 ---
@@ -309,6 +322,7 @@ Multiple sentences flow naturally together.]
 - Confidence always follows the citation numbers
 - Source list uses hyphens, format: `[N] Name — URL`
 - NEVER use emoji in citations or markers
+- **Single-engine rule:** If only 1 engine was used, ALL sections use `(Single source)` — never output a confidence percentage (no cross-validation was possible)
 
 ---
 

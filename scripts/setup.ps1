@@ -87,6 +87,35 @@ if (Test-Path $StateFile) {
 $needKeys = $false
 $engineCount = 0
 
+# Helper: validate engine key
+function Test-EngineKey {
+    param([string]$Engine, [string]$Key)
+    try {
+        switch ($Engine) {
+            "TAVILY" {
+                $body = @{ api_key = $Key; query = "test"; max_results = 1 } | ConvertTo-Json
+                $r = Invoke-WebRequest -Uri "https://api.tavily.com/search" -Method Post -ContentType "application/json" -Body $body -TimeoutSec 5 -ErrorAction Stop
+                return $r.StatusCode -in @(200, 201)
+            }
+            "EXA" {
+                $body = @{ query = "test"; numResults = 1 } | ConvertTo-Json
+                $r = Invoke-WebRequest -Uri "https://api.exa.ai/search" -Method Post -ContentType "application/json" -Headers @{"x-api-key" = $Key} -Body $body -TimeoutSec 5 -ErrorAction Stop
+                return $r.StatusCode -in @(200, 201)
+            }
+            "BRAVE" {
+                $r = Invoke-WebRequest -Uri "https://api.search.brave.com/res/v1/web/search?q=test&count=1" -Method Get -Headers @{"Accept" = "application/json"; "X-Subscription-Token" = $Key} -TimeoutSec 5 -ErrorAction Stop
+                return $r.StatusCode -in @(200, 201)
+            }
+        }
+    } catch {
+        $code = $_.Exception.Response.StatusCode.value__
+        if ($code -eq 401 -or $code -eq 403) { return $false }
+        # Timeout/network errors → allow (don't block on transient failures)
+        return $true
+    }
+    return $true
+}
+
 # Helper: ask for a single engine's key
 function Ask-EngineKey {
     param(
@@ -117,17 +146,34 @@ function Ask-EngineKey {
 
     # State 0 → ask
     Write-Warn "$EnvVar not found"
-    $input = Read-Host "  Enter $Engine API Key (type 'n' if you don't have one, press Enter to configure later, get from $Url)"
+    Write-Host "  Options:"
+    Write-Host "    Enter API Key  → configure this engine"
+    Write-Host "    Press Enter    → skip, will ask next time"
+    Write-Host "    Type 'n'       → mark as unavailable, never ask again"
+    $input = Read-Host "  Enter key (get from $Url)"
 
     if ($input -eq 'n' -or $input -eq 'N') {
-        $s[$Engine] = -1
-        Write-Info "  Marked as unavailable, won't ask again"
+        $confirm = Read-Host "  Confirm mark $Engine as unavailable? Won't ask again [y/N]"
+        if ($confirm -eq 'y' -or $confirm -eq 'Y') {
+            $s[$Engine] = -1
+            Write-Info "  Marked as unavailable"
+        } else {
+            $s[$Engine] = 0
+            Write-Info "  Cancelled, skipping"
+        }
         return $null
     } elseif ($input) {
-        $s[$Engine] = 1
-        $NeedKeysRef.Value = $true
-        $CountRef.Value++
-        return $input
+        # Validate key
+        if (Test-EngineKey -Engine $Engine -Key $input) {
+            $s[$Engine] = 1
+            $NeedKeysRef.Value = $true
+            $CountRef.Value++
+            return $input
+        } else {
+            Write-Warn "  Key validation failed (invalid or expired), skipping $Engine"
+            $s[$Engine] = 0
+            return $null
+        }
     } else {
         $s[$Engine] = 0
         Write-Info "  Skipped, will ask next time"

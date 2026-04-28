@@ -88,6 +88,40 @@ fi
 need_keys=false
 ENGINE_COUNT=0
 
+# 辅助函数：验证 key 有效性
+# 参数: $1=引擎名 $2=key值
+# 返回: 0=有效 1=无效
+validate_key() {
+    local engine="$1" key="$2"
+    local http_code
+    case "$engine" in
+        TAVILY)
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
+                "https://api.tavily.com/search" \
+                -H "Content-Type: application/json" \
+                -d "{\"api_key\":\"$key\",\"query\":\"test\",\"max_results\":1}" 2>/dev/null)
+            ;;
+        EXA)
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
+                "https://api.exa.ai/search" \
+                -H "Content-Type: application/json" \
+                -H "x-api-key: $key" \
+                -d '{"query":"test","numResults":1}' 2>/dev/null)
+            ;;
+        BRAVE)
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
+                "https://api.search.brave.com/res/v1/web/search?q=test&count=1" \
+                -H "Accept: application/json" \
+                -H "X-Subscription-Token: $key" 2>/dev/null)
+            ;;
+    esac
+    # 200/201 = valid, 401/403 = invalid, 其他（超时等）= 放行
+    if [[ "$http_code" == "401" || "$http_code" == "403" ]]; then
+        return 1
+    fi
+    return 0
+}
+
 # 辅助函数：处理单个引擎
 # 参数: $1=引擎名 $2=环境变量名 $3=获取URL $4=功能描述
 ask_key() {
@@ -111,17 +145,34 @@ ask_key() {
 
     # 状态 0 → 询问
     warn "未检测到 $var"
-    echo -n "  输入 $engine API Key（没有请输入 n，回车稍后配置，从 $url 获取）: "
+    echo "  选项："
+    echo "    输入 API Key → 配置该引擎"
+    echo "    直接回车     → 跳过，下次还会问"
+    echo "    输入 n       → 标记为无，永不再问（可删除 .supersearch-state 恢复）"
+    echo -n "  请输入（从 $url 获取）: "
     read -r input
 
     if [[ "$input" == "n" || "$input" == "N" ]]; then
-        STATE[$engine]=-1
-        info "  已标记为无，下次安装不再询问"
+        echo -n "  确认标记 $engine 为无？下次安装不再询问 [y/N]: "
+        read -r confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            STATE[$engine]=-1
+            info "  已标记为无"
+        else
+            STATE[$engine]=0
+            info "  取消，跳过"
+        fi
     elif [[ -n "$input" ]]; then
-        declare -g "$var=$input"
-        STATE[$engine]=1
-        need_keys=true
-        ENGINE_COUNT=$((ENGINE_COUNT + 1))
+        # 验证 key 有效性
+        if validate_key "$engine" "$input"; then
+            declare -g "$var=$input"
+            STATE[$engine]=1
+            need_keys=true
+            ENGINE_COUNT=$((ENGINE_COUNT + 1))
+        else
+            warn "  Key 验证失败（无效或过期），跳过 $engine"
+            STATE[$engine]=0
+        fi
     else
         STATE[$engine]=0
         info "  跳过，下次安装会再询问"
