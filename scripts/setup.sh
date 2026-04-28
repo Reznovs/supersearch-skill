@@ -14,7 +14,7 @@ err()   { echo -e "${RED}[ERR ]${NC} $*"; }
 
 echo "╔══════════════════════════════════════════════╗"
 echo "║     SuperSearch Skill — 一键安装            ║"
-echo "║     4引擎统一搜索 + 交叉验证引用            ║"
+echo "║     3-4引擎统一搜索 + 交叉验证引用          ║"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 
@@ -249,5 +249,5 @@ if command -v claude &>/dev/null; then
 fi
 
 echo ""
-echo "  更多信息: 查看 $SKILL_DIR/README_CN.md"
+echo "  更多信息: 查看 $SKILL_DIR/README.md"
 echo ""
