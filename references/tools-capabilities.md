@@ -1,4 +1,4 @@
-# Four-Tool Capability Matrix
+# 3-4 Tool Capability Matrix
 
 ## Overview
 
@@ -69,15 +69,15 @@
 
 ## Brave Search
 
-**5 core capabilities:**
+**2 registered tools** (+ 3 additional if manually registered):
 
-| Tool | Function | Best for |
-|------|----------|----------|
-| `brave_web_search` | Web search | General search with image/video filters |
-| `brave_news_search` | News search | Latest news, breaking events in real-time |
-| `brave_image_search` | Image search | Finding image assets |
-| `brave_video_search` | Video search | Finding video content |
-| `brave_local_search` | Local search | Local business, POI information |
+| Tool | Function | Best for | Status |
+|------|----------|----------|--------|
+| `brave_web_search` | Web search | General search with image/video filters | Registered |
+| `brave_news_search` | News search | Latest news, breaking events in real-time | Registered |
+| `brave_image_search` | Image search | Finding image assets | Not registered |
+| `brave_video_search` | Video search | Finding video content | Not registered |
+| `brave_local_search` | Local search | Local business, POI information | Not registered |
 
 **When to prefer Brave:**
 - Latest news/event coverage (→ news_search)

@@ -5,6 +5,9 @@
 # Claude Code local context (not for git)
 CLAUDE.md
 
+# Claude local settings
+.claude/
+
 # Shell history
 *.log
 

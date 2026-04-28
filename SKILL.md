@@ -194,11 +194,10 @@ factor, while Source B argues Y is more critical.
      - `EXA_API_KEY` set → Exa available
      - `BRAVE_API_KEY` set → Brave available
      - Any key missing → skip that engine entirely
-   - **Validate keys** — For each configured key, test with a minimal API call:
-     - Tavily: call `tavily_search` with a simple query. If 401/403 → key invalid/expired
-     - Exa: call `web_search_exa` with a simple query. If 401/403 → key invalid/expired
-     - Brave: call `brave_web_search` with a simple query. If 401/403 → key invalid/expired
-     - If a key fails: skip that engine and **inform the user** which engine is unavailable and why (e.g., "Brave API key expired, skipping Brave engine")
+   - **Validate keys at runtime** — Use optimistic strategy: proceed with all configured engines. If any engine returns 401/403 during search:
+     - Skip that engine for the current search
+     - Inform the user: "[Engine] API key is invalid or expired, skipping this engine"
+     - Continue with remaining engines
    - **Minimum requirement:** at least 1 engine must be available. If 0 engines, inform the user to configure at least one API key.
    - **Cross-validation note:** with only 1 engine, mark all results as "Single source". With 2+ engines, proceed normally.
 1. **Classify the topic** (Section 2) — determine language distribution

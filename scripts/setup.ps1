@@ -60,11 +60,15 @@ Write-Info "(Can be preset via environment variables: TAVILY_API_KEY / EXA_API_K
 $KeysFile = Join-Path $SkillDir ".env"
 $StateFile = Join-Path $SkillDir ".supersearch-state"
 
-# Load existing .env if present
+# Load existing .env if present (don't overwrite existing env vars)
 if (Test-Path $KeysFile) {
     Get-Content $KeysFile | ForEach-Object {
         if ($_ -match '^([^#][^=]+)=(.+)$') {
-            [Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim(), "Process")
+            $k = $Matches[1].Trim()
+            $v = $Matches[2].Trim()
+            if (-not [Environment]::GetEnvironmentVariable($k, "Process")) {
+                [Environment]::SetEnvironmentVariable($k, $v, "Process")
+            }
         }
     }
     Write-Info "Found existing .env file"
@@ -170,86 +174,49 @@ Write-Info "Phase 3/5: Installing Skill to platforms..."
 
 $platformsInstalled = 0
 
-# Claude Code
-function Install-ToClaude {
-    $homePath = $env:USERPROFILE
-    $ccSwitch = Join-Path $homePath ".cc-switch\skills"
-    $claudeSkills = Join-Path $homePath ".claude\skills"
-
-    if (Test-Path $ccSwitch) {
-        $target = Join-Path $ccSwitch $using:SkillName
-    } elseif (Test-Path $claudeSkills) {
-        $target = Join-Path $claudeSkills $using:SkillName
-    } else {
-        $target = Join-Path $claudeSkills $using:SkillName
-    }
-
-    $parentDir = Split-Path -Parent $target
+# Helper: deploy skill to a target directory
+function Deploy-Skill {
+    param([string]$TargetPath, [string]$PlatformName)
+    $parentDir = Split-Path -Parent $TargetPath
     if (-not (Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }
-    if (Test-Path $target) { Remove-Item -Recurse -Force $target }
-
-    # Copy excluding .git, .gitignore, .env
-    Copy-Item -Recurse -Force $using:SkillDir $target
-    @(".git", ".gitignore", ".env") | ForEach-Object {
-        $p = Join-Path $target $_
+    if (Test-Path $TargetPath) { Remove-Item -Recurse -Force $TargetPath }
+    Copy-Item -Recurse -Force $SkillDir $TargetPath
+    @(".git", ".gitignore", ".env", ".supersearch-state") | ForEach-Object {
+        $p = Join-Path $TargetPath $_
         if (Test-Path $p) { Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue }
     }
+    Write-Ok "${PlatformName}: $TargetPath"
+    $script:platformsInstalled++
+}
 
-    Write-Ok "Claude Code: $target"
-    $using:platformsInstalled++
+# Claude Code
+$homePath = $env:USERPROFILE
+$ccSwitch = Join-Path $homePath ".cc-switch\skills"
+$claudeSkills = Join-Path $homePath ".claude\skills"
+
+if (Test-Path $ccSwitch) {
+    Deploy-Skill (Join-Path $ccSwitch $SkillName) "Claude Code"
+} elseif (Test-Path $claudeSkills) {
+    Deploy-Skill (Join-Path $claudeSkills $SkillName) "Claude Code"
+} else {
+    Deploy-Skill (Join-Path $claudeSkills $SkillName) "Claude Code"
 }
 
 # Codex
-function Install-ToCodex {
-    $homePath = $env:USERPROFILE
-    $codexDir = Join-Path $homePath ".codex"
-
-    if (Test-Path $codexDir) {
-        $target = Join-Path $codexDir "skills\user\$using:SkillName"
-        $parentDir = Split-Path -Parent $target
-        if (-not (Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }
-        if (Test-Path $target) { Remove-Item -Recurse -Force $target }
-
-        Copy-Item -Recurse -Force $using:SkillDir $target
-        @(".git", ".gitignore", ".env") | ForEach-Object {
-            $p = Join-Path $target $_
-            if (Test-Path $p) { Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue }
-        }
-
-        Write-Ok "Codex: $target"
-        $using:platformsInstalled++
-    } else {
-        Write-Info "Codex not installed, skipping"
-    }
+$codexDir = Join-Path $homePath ".codex"
+if (Test-Path $codexDir) {
+    Deploy-Skill (Join-Path $codexDir "skills\user\$SkillName") "Codex"
+} else {
+    Write-Info "Codex not installed, skipping"
 }
 
 # OpenCode
-function Install-ToOpenCode {
-    $homePath = $env:USERPROFILE
-    $ocDir = Join-Path $homePath ".config\opencode"
-
-    if (Test-Path $ocDir) {
-        $target = Join-Path $ocDir "skills\$using:SkillName"
-        $parentDir = Split-Path -Parent $target
-        if (-not (Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }
-        if (Test-Path $target) { Remove-Item -Recurse -Force $target }
-
-        Copy-Item -Recurse -Force $using:SkillDir $target
-        @(".git", ".gitignore", ".env") | ForEach-Object {
-            $p = Join-Path $target $_
-            if (Test-Path $p) { Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue }
-        }
-
-        Write-Ok "OpenCode: $target"
-        $using:platformsInstalled++
-    } else {
-        Write-Info "OpenCode not installed, skipping"
-    }
+$ocDir = Join-Path $homePath ".config\opencode"
+if (Test-Path $ocDir) {
+    Deploy-Skill (Join-Path $ocDir "skills\$SkillName") "OpenCode"
+} else {
+    Write-Info "OpenCode not installed, skipping"
 }
-
-Install-ToClaude
-Install-ToCodex
-Install-ToOpenCode
 
 if ($platformsInstalled -eq 0) {
     Write-Err "No platforms found! Please install Claude Code / Codex / OpenCode first."
