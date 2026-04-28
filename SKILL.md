@@ -191,11 +191,12 @@ factor, while Source B argues Y is more critical.
    - **Check IP region** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
      - If `"countryCode":"US"` → WebSearch is available
      - Otherwise (non-US, timeout, error) → skip WebSearch
-   - **Check API keys** — Check if each engine's key/tool is configured:
-     - `TAVILY_API_KEY` set → Tavily available
-     - `EXA_API_KEY` set → Exa available
-     - `BRAVE_API_KEY` set → Brave available
-     - Any key missing → that engine is unavailable
+   - **Check MCP tools** — Verify that MCP tools are actually callable (not just that API keys exist):
+     - `mcp__tavily__tavily_search` exists → Tavily available
+     - `mcp__exa__web_search_exa` exists → Exa available
+     - `mcp__brave__brave_web_search` exists → Brave available
+     - If a key is set but MCP tool is missing → the MCP server is not registered. Inform the user: "[Engine] API key is configured but MCP server is not registered. Run `bash scripts/setup.sh` to auto-register."
+   - **NEVER use placeholder/echo** — If an MCP tool is unavailable, do NOT use Bash echo or any substitute. Simply skip that engine and inform the user.
    - **AI-driven key recovery** — If engines are missing, ask the user:
      > "当前配置了 X 个引擎（[列表]）。以下引擎未配置：[缺失列表]。你有这些 API Key 吗？如果有请提供，我来配置。"
      - If user provides a key → update `.env` and `.supersearch-state`, add the engine
@@ -343,6 +344,7 @@ Multiple sentences flow naturally together.]
 - NEVER guess a URL — only cite URLs actually returned by the tools
 - NEVER use emoji in citation markers or confidence display
 - NEVER split every sentence into its own section with citations
+- NEVER use Bash echo, placeholder text, or any substitute for MCP tool calls — if a tool is unavailable, skip it and inform the user
 
 ---
 

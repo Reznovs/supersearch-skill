@@ -270,42 +270,35 @@ if ($platformsInstalled -eq 0) {
 }
 
 # ── Phase 4: MCP Server Registration ──────────────────────
-Write-Info "Phase 4/5: Checking MCP server configuration..."
+Write-Info "Phase 4/5: Registering MCP servers..."
 
 $claude = Get-Command claude -ErrorAction SilentlyContinue
-if ($claude) {
-    # Brave Search MCP
-    $braveRegistered = & claude mcp get brave-search 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Ok "Brave Search MCP registered"
-    } else {
-        Write-Info "Registering Brave Search MCP Server..."
-        try {
-            & claude mcp add brave-search -- npx -y "@brave/brave-search-mcp-server" --brave-api-key $braveKey
-            Write-Ok "Brave Search MCP registered"
-        } catch {
-            Write-Warn "Brave Search MCP registration failed. Please run manually:"
-            Write-Host "  claude mcp add brave-search -- npx -y @brave/brave-search-mcp-server --brave-api-key <your_key>"
-        }
-    }
 
-    # Check Tavily
-    & claude mcp get tavily 2>$null | Out-Null
+function Register-MCPServer {
+    param([string]$Name, [string]$Pkg, [string[]]$ExtraArgs = @())
+    if (-not $claude) { return }
+    & claude mcp get $Name 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
-        Write-Ok "Tavily MCP registered"
-    } else {
-        Write-Warn "Tavily MCP not found. Please register Tavily MCP Server."
+        Write-Ok "$Name MCP already registered"
+        return
     }
+    Write-Info "Registering $Name MCP Server..."
+    try {
+        $args = @("mcp", "add", $Name, "--", "npx", "-y", $Pkg) + $ExtraArgs
+        & claude @args
+        Write-Ok "$Name MCP registered"
+    } catch {
+        Write-Warn "$Name MCP registration failed. Please run manually:"
+        Write-Host "  claude mcp add $Name -- npx -y $Pkg $($ExtraArgs -join ' ')"
+    }
+}
 
-    # Check Exa
-    & claude mcp get exa 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Ok "Exa MCP registered"
-    } else {
-        Write-Warn "Exa MCP not found. Please register Exa MCP Server."
-    }
-} else {
-    Write-Warn "'claude' command not found, skipping MCP check"
+if ($tavilyKey) { Register-MCPServer "tavily" "tavily-mcp@latest" }
+if ($exaKey)    { Register-MCPServer "exa" "exa-mcp-server@latest" }
+if ($braveKey)  { Register-MCPServer "brave-search" "@brave/brave-search-mcp-server" @("--brave-api-key", $braveKey) }
+
+if (-not $claude) {
+    Write-Warn "'claude' command not found, skipping MCP registration"
     Write-Info "Please configure search MCP servers in your Agent platform."
 }
 

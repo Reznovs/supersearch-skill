@@ -277,38 +277,48 @@ if (( PLATFORMS_INSTALLED == 0 )); then
 fi
 
 # ── Phase 4: 注册 MCP 服务器 ────────────────────────────────
-info "Phase 4/5: 检查 MCP 服务器配置..."
+info "Phase 4/5: 注册 MCP 服务器..."
 
-# 检测 claude 命令是否可用
-if command -v claude &>/dev/null; then
-    # Brave Search MCP
-    if claude mcp get brave-search &>/dev/null 2>&1; then
-        ok "Brave Search MCP 已注册 ✓"
-    else
-        info "正在注册 Brave Search MCP Server..."
-        if claude mcp add brave-search -- npx -y @brave/brave-search-mcp-server --brave-api-key "$BRAVE_API_KEY" 2>&1; then
-            ok "Brave Search MCP 注册成功 ✓"
-        else
-            warn "Brave Search MCP 注册失败，请手动执行:"
-            echo "  claude mcp add brave-search -- npx -y @brave/brave-search-mcp-server --brave-api-key <your_key>"
-        fi
+# 辅助函数：注册单个 MCP 服务器
+# 参数: $1=名称 $2=包名 $3=额外环境变量
+register_mcp() {
+    local name="$1" pkg="$2" env_args="${3:-}"
+
+    if ! command -v claude &>/dev/null; then
+        warn "'claude' 命令不可用，跳过 MCP 注册"
+        return
     fi
 
-    # 检查 Tavily
-    if claude mcp get tavily &>/dev/null 2>&1; then
-        ok "Tavily MCP 已注册 ✓"
-    else
-        warn "Tavily MCP 未找到。请确认已注册 Tavily MCP Server。"
+    if claude mcp get "$name" &>/dev/null 2>&1; then
+        ok "$name MCP 已注册 ✓"
+        return
     fi
 
-    # 检查 Exa
-    if claude mcp get exa &>/dev/null 2>&1; then
-        ok "Exa MCP 已注册 ✓"
+    info "正在注册 $name MCP Server..."
+    local cmd="claude mcp add $name -- npx -y $pkg $env_args"
+    if eval "$cmd" 2>&1; then
+        ok "$name MCP 注册成功 ✓"
     else
-        warn "Exa MCP 未找到。请确认已注册 Exa MCP Server。"
+        warn "$name MCP 注册失败，请手动执行:"
+        echo "  claude mcp add $name -- npx -y $pkg $env_args"
     fi
-else
-    warn "未检测到 'claude' 命令，跳过 MCP 检查"
+}
+
+# 仅注册已配置 key 的引擎
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+    register_mcp "tavily" "tavily-mcp@latest" ""
+fi
+
+if [[ -n "${EXA_API_KEY:-}" ]]; then
+    register_mcp "exa" "exa-mcp-server@latest" ""
+fi
+
+if [[ -n "${BRAVE_API_KEY:-}" ]]; then
+    register_mcp "brave-search" "@brave/brave-search-mcp-server" "--brave-api-key $BRAVE_API_KEY"
+fi
+
+if ! command -v claude &>/dev/null; then
+    warn "未检测到 'claude' 命令，跳过 MCP 注册"
     info "请确保你的 Agent 平台已配置对应的搜索工具。"
 fi
 
