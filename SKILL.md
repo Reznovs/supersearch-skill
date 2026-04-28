@@ -185,13 +185,20 @@ factor, while Source B argues Y is more critical.
 
 ### 4.1 Execution Protocol
 
-0. **Check IP region** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
-   - If response contains `"countryCode":"US"` → use 4 engines (WebSearch + Tavily + Exa + Brave)
-   - Otherwise (non-US, timeout, error, empty) → use 3 engines (Tavily + Exa + Brave), skip WebSearch entirely
-   - **Fail-safe:** any exception defaults to 3 engines
+0. **Check engine availability** — Determine which engines are available:
+   - **Check IP region** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
+     - If `"countryCode":"US"` → WebSearch is available
+     - Otherwise (non-US, timeout, error) → skip WebSearch
+   - **Check API keys** — Check if each engine's key/tool is configured:
+     - `TAVILY_API_KEY` set → Tavily available
+     - `EXA_API_KEY` set → Exa available
+     - `BRAVE_API_KEY` set → Brave available
+     - Any key missing → skip that engine entirely
+   - **Minimum requirement:** at least 1 engine must be available. If 0 engines, inform the user to configure at least one API key.
+   - **Cross-validation note:** with only 1 engine, mark all results as "Single source". With 2+ engines, proceed normally.
 1. **Classify the topic** (Section 2) — determine language distribution
-2. **Write 3-4 queries** — count depends on Step 0; 2-3 in primary language(s), rest in secondary
-3. **Fire all available engines IN PARALLEL** (3 or 4 per Step 0) with language-appropriate queries
+2. **Write N queries** — N = number of available engines; distribute languages per Section 2
+3. **Fire all available engines IN PARALLEL** with language-appropriate queries
 4. **Synthesize results** — extract facts, group by topic, assign confidence
 5. **Format output** — paragraph-level citations + source list
 

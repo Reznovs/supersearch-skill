@@ -79,10 +79,11 @@ bash scripts/setup.sh
 - **系统**：Linux、macOS 或 Windows（PowerShell 5.1+）
 - **Node.js**：18+
 - **Agent 平台**：Claude Code / Codex / OpenCode 至少一个
-- 3 个 API Key（均有免费额度）：
-  - [Tavily](https://app.tavily.com) — 深度研究
-  - [Exa](https://dashboard.exa.ai) — 代码 + 学术
-  - [Brave](https://brave.com/search/api/) — 新闻 + 通用
+- API Key（可选，至少配 1 个，均有免费额度）：
+  - [Tavily](https://app.tavily.com) — 深度研究（注册即获免费额度）
+  - [Exa](https://dashboard.exa.ai) — 代码 + 学术（注册即获免费额度）
+  - [Brave](https://brave.com/search/api/) — 新闻 + 通用（每月免费 $5）
+  - WebSearch — 内置工具，无需 Key（仅美国 IP）
 
 ### 一键安装（推荐）
 
@@ -261,6 +262,19 @@ SuperSearch 自动根据话题地域调整搜索语言：
 <summary><b>没有美国 IP 怎么办？</b></summary>
 
 完全不影响使用。系统自动检测 IP，非美国时跳过 WebSearch，使用 Tavily + Exa + Brave 三个引擎。三引擎仍可充分交叉验证。
+
+</details>
+
+<details>
+<summary><b>只有部分 API Key，能用吗？</b></summary>
+
+可以。所有 Key 均可选，有几个配几个：
+- **3 个 Key** → 3 引擎并行 + 交叉验证（最佳）
+- **2 个 Key** → 2 引擎并行 + 交叉验证（可用）
+- **1 个 Key** → 单引擎搜索，结果标记为"单一来源"（基本可用）
+- **0 个 Key** → 无法使用，至少需要 1 个
+
+安装脚本会跳过未配置的引擎，搜索时只调用已配置的引擎。
 
 </details>
 

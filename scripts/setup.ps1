@@ -55,6 +55,7 @@ if ($failures -gt 0) {
 # ── Phase 2: API Keys ─────────────────────────────────────
 Write-Info "Phase 2/5: Configuring API Keys..."
 Write-Info "(Can be preset via environment variables: TAVILY_API_KEY / EXA_API_KEY / BRAVE_API_KEY)"
+Write-Info "(All keys are optional — missing engines will be skipped)"
 
 $KeysFile = Join-Path $SkillDir ".env"
 
@@ -69,46 +70,71 @@ if (Test-Path $KeysFile) {
 }
 
 $needKeys = $false
+$engineCount = 0
 
 # Tavily
 $tavilyKey = [Environment]::GetEnvironmentVariable("TAVILY_API_KEY", "Process")
 if (-not $tavilyKey) {
     Write-Warn "TAVILY_API_KEY not found"
-    $tavilyKey = Read-Host "  Enter Tavily API Key (get from https://app.tavily.com)"
-    $needKeys = $true
+    $tavilyKey = Read-Host "  Enter Tavily API Key (press Enter to skip, get from https://app.tavily.com)"
+    if ($tavilyKey) {
+        $needKeys = $true
+        $engineCount++
+    } else {
+        Write-Info "  Skipping Tavily (deep research unavailable)"
+    }
 } else {
     Write-Ok "TAVILY_API_KEY configured"
+    $engineCount++
 }
 
 # Exa
 $exaKey = [Environment]::GetEnvironmentVariable("EXA_API_KEY", "Process")
 if (-not $exaKey) {
     Write-Warn "EXA_API_KEY not found"
-    $exaKey = Read-Host "  Enter Exa API Key (get from https://dashboard.exa.ai)"
-    $needKeys = $true
+    $exaKey = Read-Host "  Enter Exa API Key (press Enter to skip, get from https://dashboard.exa.ai)"
+    if ($exaKey) {
+        $needKeys = $true
+        $engineCount++
+    } else {
+        Write-Info "  Skipping Exa (code/academic search unavailable)"
+    }
 } else {
     Write-Ok "EXA_API_KEY configured"
+    $engineCount++
 }
 
 # Brave
 $braveKey = [Environment]::GetEnvironmentVariable("BRAVE_API_KEY", "Process")
 if (-not $braveKey) {
     Write-Warn "BRAVE_API_KEY not found"
-    $braveKey = Read-Host "  Enter Brave Search API Key (get from https://brave.com/search/api/)"
-    $needKeys = $true
+    $braveKey = Read-Host "  Enter Brave API Key (press Enter to skip, get from https://brave.com/search/api/)"
+    if ($braveKey) {
+        $needKeys = $true
+        $engineCount++
+    } else {
+        Write-Info "  Skipping Brave (news search unavailable)"
+    }
 } else {
     Write-Ok "BRAVE_API_KEY configured"
+    $engineCount++
+}
+
+if ($engineCount -eq 0) {
+    Write-Err "No API Keys configured! At least one search engine is required."
+    exit 1
 }
 
 if ($needKeys) {
     @"
 # SuperSearch API Keys — Do NOT commit to Git
+# Leave blank to skip that engine
 TAVILY_API_KEY=$tavilyKey
 EXA_API_KEY=$exaKey
 BRAVE_API_KEY=$braveKey
 "@ | Set-Content -Path $KeysFile -Encoding UTF8
 
-    Write-Ok "API Keys saved to $KeysFile"
+    Write-Ok "API Keys saved to $KeysFile ($engineCount engine(s) available)"
     Write-Info "This file is in .gitignore and will not be committed to GitHub"
 }
 

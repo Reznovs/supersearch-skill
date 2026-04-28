@@ -50,6 +50,7 @@ fi
 # ── Phase 2: 收集 API Keys ─────────────────────────────────
 info "Phase 2/5: 配置 API Keys..."
 info "（可从环境变量预设: TAVILY_API_KEY / EXA_API_KEY / BRAVE_API_KEY）"
+info "（所有 Key 均可选，缺少的引擎会自动跳过）"
 
 KEYS_FILE="$SKILL_DIR/.env"
 
@@ -60,46 +61,71 @@ if [[ -f "$KEYS_FILE" ]]; then
 fi
 
 need_keys=false
+ENGINE_COUNT=0
 
 # Tavily
 if [[ -z "${TAVILY_API_KEY:-}" ]]; then
     warn "未检测到 TAVILY_API_KEY"
-    echo -n "  请输入 Tavily API Key（从 https://app.tavily.com 获取）: "
+    echo -n "  请输入 Tavily API Key（回车跳过，从 https://app.tavily.com 获取）: "
     read -r TAVILY_API_KEY
-    need_keys=true
+    if [[ -n "$TAVILY_API_KEY" ]]; then
+        need_keys=true
+        ENGINE_COUNT=$((ENGINE_COUNT + 1))
+    else
+        info "  跳过 Tavily（深度研究功能不可用）"
+    fi
 else
     ok "TAVILY_API_KEY 已配置 ✓"
+    ENGINE_COUNT=$((ENGINE_COUNT + 1))
 fi
 
 # Exa
 if [[ -z "${EXA_API_KEY:-}" ]]; then
     warn "未检测到 EXA_API_KEY"
-    echo -n "  请输入 Exa API Key（从 https://dashboard.exa.ai 获取）: "
+    echo -n "  请输入 Exa API Key（回车跳过，从 https://dashboard.exa.ai 获取）: "
     read -r EXA_API_KEY
-    need_keys=true
+    if [[ -n "$EXA_API_KEY" ]]; then
+        need_keys=true
+        ENGINE_COUNT=$((ENGINE_COUNT + 1))
+    else
+        info "  跳过 Exa（代码/学术搜索不可用）"
+    fi
 else
     ok "EXA_API_KEY 已配置 ✓"
+    ENGINE_COUNT=$((ENGINE_COUNT + 1))
 fi
 
 # Brave
 if [[ -z "${BRAVE_API_KEY:-}" ]]; then
     warn "未检测到 BRAVE_API_KEY"
-    echo -n "  请输入 Brave Search API Key（从 https://brave.com/search/api/ 获取）: "
+    echo -n "  请输入 Brave API Key（回车跳过，从 https://brave.com/search/api/ 获取）: "
     read -r BRAVE_API_KEY
-    need_keys=true
+    if [[ -n "$BRAVE_API_KEY" ]]; then
+        need_keys=true
+        ENGINE_COUNT=$((ENGINE_COUNT + 1))
+    else
+        info "  跳过 Brave（新闻搜索不可用）"
+    fi
 else
     ok "BRAVE_API_KEY 已配置 ✓"
+    ENGINE_COUNT=$((ENGINE_COUNT + 1))
+fi
+
+if (( ENGINE_COUNT == 0 )); then
+    err "未配置任何 API Key！至少需要一个搜索引擎才能使用 SuperSearch。"
+    exit 1
 fi
 
 if $need_keys; then
     # 写入 .env（不会被 git 追踪，已在 .gitignore 中）
     cat > "$KEYS_FILE" <<EOF
 # SuperSearch API Keys — 不要提交到 Git
-TAVILY_API_KEY=$TAVILY_API_KEY
-EXA_API_KEY=$EXA_API_KEY
-BRAVE_API_KEY=$BRAVE_API_KEY
+# 缺少的 Key 留空即可，对应引擎会自动跳过
+TAVILY_API_KEY=${TAVILY_API_KEY:-}
+EXA_API_KEY=${EXA_API_KEY:-}
+BRAVE_API_KEY=${BRAVE_API_KEY:-}
 EOF
-    ok "API Keys 已保存到 $KEYS_FILE"
+    ok "API Keys 已保存到 $KEYS_FILE（$ENGINE_COUNT 个引擎可用）"
     info "此文件已在 .gitignore 中，不会被提交到 GitHub"
 fi
 
