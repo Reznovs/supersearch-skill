@@ -12,8 +12,9 @@ description: |
   search with readable, well-formatted results.
 license: MIT
 compatibility: "agentskills.io standard. Compatible with Claude Code, Codex,
-  OpenCode. Requires Node.js 18+ and configured search MCP servers (Tavily,
-  Exa, Brave). See references/platform-tools.md for per-platform tool names."
+  OpenCode. Cross-platform: Linux, macOS, Windows (PowerShell). Requires
+  Node.js 18+ and configured search MCP servers (Tavily, Exa, Brave).
+  See references/platform-tools.md for per-platform tool names."
 metadata:
   version: "1.1.0"
   keywords: "search, multi-engine, cross-validation, citation, verification,

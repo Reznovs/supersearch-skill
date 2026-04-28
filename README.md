@@ -76,8 +76,9 @@ bash scripts/setup.sh
 
 ### 前置要求
 
-- Node.js 18+
-- Claude Code / Codex / OpenCode 至少一个
+- **系统**：Linux、macOS 或 Windows（PowerShell 5.1+）
+- **Node.js**：18+
+- **Agent 平台**：Claude Code / Codex / OpenCode 至少一个
 - 3 个 API Key（均有免费额度）：
   - [Tavily](https://app.tavily.com) — 深度研究
   - [Exa](https://dashboard.exa.ai) — 代码 + 学术
@@ -85,13 +86,26 @@ bash scripts/setup.sh
 
 ### 一键安装（推荐）
 
+**Linux / macOS:**
+
 ```bash
+git clone https://github.com/Reznovs/supersearch-skill.git
+cd supersearch-skill
 bash scripts/setup.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+git clone https://github.com/Reznovs/supersearch-skill.git
+cd supersearch-skill
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
 <details>
 <summary>手动安装</summary>
 
+**Linux / macOS:**
 ```bash
 # 1. 复制项目到 Skill 目录
 cp -r supersearch-skill ~/.claude/skills/supersearch/
@@ -104,21 +118,46 @@ cp .env.example .env
 claude mcp add brave-search -- npx -y @brave/brave-search-mcp-server --brave-api-key <your_key>
 ```
 
+**Windows (PowerShell):**
+```powershell
+# 1. 复制项目到 Skill 目录
+Copy-Item -Recurse supersearch-skill "$env:USERPROFILE\.claude\skills\supersearch"
+
+# 2. 配置 API Keys
+Copy-Item .env.example .env
+# 编辑 .env 填入你的 API Keys
+
+# 3. 注册 Brave MCP Server
+claude mcp add brave-search -- npx -y @brave/brave-search-mcp-server --brave-api-key <your_key>
+```
+
 </details>
 
 <details>
 <summary>Codex / OpenCode 安装</summary>
 
-**Codex:**
+**Codex (Linux/macOS):**
 ```bash
 cp -r supersearch-skill ~/.codex/skills/user/supersearch/
 cp .env.example .env
 ```
 
-**OpenCode:**
+**Codex (Windows):**
+```powershell
+Copy-Item -Recurse supersearch-skill "$env:USERPROFILE\.codex\skills\user\supersearch"
+Copy-Item .env.example .env
+```
+
+**OpenCode (Linux/macOS):**
 ```bash
 cp -r supersearch-skill ~/.config/opencode/skills/supersearch/
 cp .env.example .env
+```
+
+**OpenCode (Windows):**
+```powershell
+Copy-Item -Recurse supersearch-skill "$env:USERPROFILE\.config\opencode\skills\supersearch"
+Copy-Item .env.example .env
 ```
 
 安装后需在对应平台的配置中注册 Tavily、Exa、Brave 的 MCP Server。
