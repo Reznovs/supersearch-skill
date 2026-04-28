@@ -114,6 +114,14 @@ Engine 3 (Exa):        English query  ← 33% English
 - Local language queries: translate key terms to the target language
 - Mix simplified + traditional Chinese INSIDE the same query if topic spans mainland + Taiwan/HK
 
+### 2.4 Output Language
+
+- **Agent output language MUST match the user's input language**
+- If user writes in Chinese → entire response in Chinese (including section headers, confidence labels, error messages)
+- If user writes in English → entire response in English
+- If user writes in another language → respond in that language
+- NEVER switch language mid-response — pick one and stick with it
+
 ---
 
 ## 3. Citation Rules — Clean & Readable
@@ -187,26 +195,39 @@ factor, while Source B argues Y is more critical.
 
 ### 4.1 Execution Protocol
 
-0. **Check engine availability** — Determine which engines are available:
-   - **Check IP region** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
-     - If `"countryCode":"US"` → WebSearch is available
-     - Otherwise (non-US, timeout, error) → skip WebSearch
-   - **Check MCP tools** — Verify that MCP tools are actually callable (not just that API keys exist):
-     - `mcp__tavily__tavily_search` exists → Tavily available
-     - `mcp__exa__web_search_exa` exists → Exa available
-     - `mcp__brave__brave_web_search` exists → Brave available
-     - If a key is set but MCP tool is missing → the MCP server is not registered. Inform the user: "[Engine] API key is configured but MCP server is not registered. Run `bash scripts/setup.sh` to auto-register."
-   - **NEVER use placeholder/echo** — If an MCP tool is unavailable, do NOT use Bash echo or any substitute. Simply skip that engine and inform the user.
-   - **AI-driven key recovery** — If engines are missing, ask the user:
-     > "当前配置了 X 个引擎（[列表]）。以下引擎未配置：[缺失列表]。你有这些 API Key 吗？如果有请提供，我来配置。"
-     - If user provides a key → update `.env` and `.supersearch-state`, add the engine
-     - If user says no → proceed with available engines, no further prompts
-   - **Validate keys at runtime** — Use optimistic strategy: proceed with all configured engines. If any engine returns 401/403 during search:
-     - Skip that engine for the current search
-     - Inform the user: "[Engine] API key is invalid or expired, skipping this engine"
-     - Continue with remaining engines
-   - **Minimum requirement:** at least 1 engine must be available. If 0 engines and user declines to provide keys, inform the user that at least 1 API key is required.
-   - **Cross-validation note:** with only 1 engine, mark all results as "Single source". With 2+ engines, proceed normally.
+**MANDATORY: Complete ALL of Step 0 before doing ANYTHING else. Do NOT skip to search.**
+
+0. **Engine Availability Checklist** — Execute these checks IN ORDER. STOP at each sub-step and complete it before moving on.
+
+   **0a. Check MCP tools** — Look at your available tool list. For each engine, check if the MCP tool is callable:
+   - `mcp__tavily__tavily_search` in your tools → Tavily available
+   - `mcp__exa__web_search_exa` in your tools → Exa available
+   - `mcp__brave__brave_web_search` in your tools → Brave available
+   - If a tool is NOT in your list → that engine is unavailable. Do NOT use Bash echo, placeholder, or any substitute.
+
+   **0b. Check WebSearch** — Run: `curl -s --max-time 3 "http://ip-api.com/json/?fields=countryCode" 2>/dev/null`
+   - If `"countryCode":"US"` → WebSearch is available
+   - Otherwise (non-US, timeout, error, or curl unavailable) → WebSearch is unavailable
+
+   **0c. Count available engines** — Tally how many engines from 0a + 0b are available.
+
+   **0d. If 0 engines available** — STOP. Do NOT search. Tell the user:
+   > "没有可用的搜索引擎。需要配置至少一个 API Key（Tavily/Exa/Brave）。要我帮你配置吗？"
+   - If user says yes → help them configure (ask for key, write to .env, register MCP)
+   - If user says no → stop entirely, do NOT attempt any search
+
+   **0e. If engines are missing but some are available** — ASK the user before searching:
+   > "当前可用引擎：[列表]。以下引擎未配置：[缺失列表]。你有这些 API Key 吗？如果有请提供，我来配置。没有的话我用当前引擎搜索。"
+   - If user provides keys → configure and add them
+   - If user says no or doesn't respond → proceed with available engines only
+
+   **0f. Validate keys at runtime** — When calling an engine, if it returns 401/403:
+   - Skip that engine for this search
+   - Inform the user: "[Engine] API key 无效或已过期，跳过该引擎"
+   - Continue with remaining engines
+
+   **0g. Cross-validation rule** — With only 1 engine, mark ALL results as `(Single source)`. With 2+ engines, calculate confidence normally.
+
 1. **Classify the topic** (Section 2) — determine language distribution
 2. **Write N queries** — N = number of available engines; distribute languages per Section 2
 3. **Fire all available engines IN PARALLEL** with language-appropriate queries
@@ -330,6 +351,7 @@ Multiple sentences flow naturally together.]
 ## 7. Quality Rules
 
 ### MUST
+- Output language MUST match the user's language — if the user writes in Chinese, respond in Chinese; if in English, respond in English. Do NOT switch languages mid-response.
 - Every section (Key Takeaways + each Detailed Findings subsection) MUST have a citation group
 - Every citation number MUST appear in the final source list with URL
 - Report contradictions honestly — state both sides, don't pick a winner
